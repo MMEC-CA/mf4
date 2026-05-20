@@ -1,14 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>mf4</title>
-  </head>
-  <body>
-    <p>mf4</p>
-  </body><!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -688,6 +679,7 @@
                 <button class="btn-header" id="btn-history">⊟</button>
                 <button class="btn-header" id="btn-sound">🔊</button>
                 <button class="btn-header" id="btn-theme">☾</button>
+                <button class="btn-header" id="btn-restart">⟳</button>
             </div>
         </div>
 
@@ -792,6 +784,8 @@ class CalculatorEngine {
         this.lastClickTime = 0;
         this.equalsClickCount = 0;
         this.equalsClickTime = 0;
+        this.divideByZeroCount = 0;
+        this.divideByZeroTime = 0;
 
         this.init();
     }
@@ -824,6 +818,7 @@ class CalculatorEngine {
         document.getElementById('btn-history').addEventListener('click', () => this.toggleHistory());
         document.getElementById('btn-sound').addEventListener('click', () => this.toggleSound());
         document.getElementById('btn-theme').addEventListener('click', () => this.toggleTheme());
+        document.getElementById('btn-restart').addEventListener('click', () => this.restart());
         document.getElementById('history-clear').addEventListener('click', () => this.clearHistory());
 
         // Logo easter egg
@@ -1029,6 +1024,45 @@ class CalculatorEngine {
         if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); this.handleAction('equals'); }
         if (e.key === 'Backspace') this.handleAction('delete');
         if (e.key === 'Escape') this.handleAction('clear');
+
+        // Track arrow keys and Konami code
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.trackKonamiKey(e.key);
+        }
+
+        // Track B and A keys
+        if (e.key === 'b' || e.key === 'B') {
+            this.trackKonamiKey('B');
+        }
+        if (e.key === 'a' || e.key === 'A') {
+            this.trackKonamiKey('A');
+        }
+    }
+
+    trackKonamiKey(key) {
+        // Convert arrow keys to directions
+        const keyMap = {
+            'ArrowUp': 'UP',
+            'ArrowDown': 'DOWN',
+            'ArrowLeft': 'LEFT',
+            'ArrowRight': 'RIGHT'
+        };
+
+        const mappedKey = keyMap[key] || key;
+        this.secretInputBuffer += mappedKey;
+
+        // Check for Konami code: UP UP DOWN DOWN LEFT RIGHT LEFT RIGHT B A
+        const konamiCode = 'UPUPDOWNDOWNLEFTRIGHTLEFTRIGHTBA';
+        if (this.secretInputBuffer.includes(konamiCode)) {
+            this.triggerSecret('KONAMI');
+            this.secretInputBuffer = '';
+        }
+
+        // Keep only last 50 chars to prevent memory waste
+        if (this.secretInputBuffer.length > 50) {
+            this.secretInputBuffer = this.secretInputBuffer.slice(-50);
+        }
     }
 
     // ============================================================
@@ -1087,12 +1121,19 @@ class CalculatorEngine {
     }
 
     applyTheme() {
-        if (this.theme === 'light') {
-            document.body.classList.add('light-theme');
-            document.getElementById('btn-theme').textContent = '☀';
-        } else {
+        if (this.theme === 'dark') {
             document.body.classList.remove('light-theme');
             document.getElementById('btn-theme').textContent = '☾';
+        } else {
+            document.body.classList.add('light-theme');
+            document.getElementById('btn-theme').textContent = '☀';
+        }
+    }
+
+    restart() {
+        if (confirm('⚠️ RESTART CALCULATOR?\n\nThis will clear all secrets, history, and achievements.\n\nAll discoveries will be reset.')) {
+            localStorage.clear();
+            location.reload();
         }
     }
 
@@ -1129,13 +1170,7 @@ class CalculatorEngine {
     checkSecretCodes() {
         const buffer = this.secretInputBuffer;
 
-        // SECRET 1: Classic Konami Code (↑↑↓↓←→←→BA)
-        if (buffer.includes('UPUPDOWNDOWNLEFTRIGHTRIGHTLEFT')) {
-            this.triggerSecret('KONAMI');
-            this.secretInputBuffer = '';
-        }
-
-        // SECRET 2: 58008 (BOOBS upside down)
+        // SECRET: 58008 (BOOBS upside down)
         if (buffer.includes('58008')) {
             this.triggerSecret('BOOBS');
             this.secretInputBuffer = '';
@@ -1176,7 +1211,31 @@ class CalculatorEngine {
         this.currentValue = 'ERROR: DIVISION BY ZERO';
         this.updateDisplay();
         this.showNotification('⚠ SYSTEM ANOMALY DETECTED', 'error');
-        this.triggerSecret('DIVIDE_BY_ZERO');
+        
+        this.divideByZeroCount++;
+        this.divideByZeroTime = Date.now();
+
+        // Visual escalation
+        if (this.divideByZeroCount === 5) {
+            document.body.classList.add('corrupted-mode');
+        }
+        if (this.divideByZeroCount === 8) {
+            document.body.classList.add('matrix-mode');
+        }
+
+        // Trigger secrets based on count
+        if (this.divideByZeroCount === 1) {
+            this.triggerSecret('DIVIDE_BY_ZERO');
+        } else if (this.divideByZeroCount === 5) {
+            this.triggerSecret('DIVIDE_BY_ZERO_X5');
+            this.triggerSecret('GLITCH_MODE');
+        } else if (this.divideByZeroCount === 6) {
+            this.triggerSecret('VOID_PROTOCOL');
+        } else if (this.divideByZeroCount === 8) {
+            this.triggerSecret('MATRIX_AWAKENS');
+        } else if (this.divideByZeroCount === 10) {
+            this.triggerSecret('CONSCIOUSNESS');
+        }
     }
 
     checkTimeBasedSecrets() {
@@ -1203,6 +1262,12 @@ class CalculatorEngine {
     triggerSecret(secretCode) {
         if (this.unlockedSecrets[secretCode]) return; // Already unlocked
 
+        // Check if prerequisites are met
+        if (!this.canUnlock(secretCode)) {
+            this.showNotification('⚠ Prerequisite not met', 'error');
+            return;
+        }
+
         this.unlockedSecrets[secretCode] = {
             unlocked: true,
             date: new Date().toISOString()
@@ -1214,52 +1279,124 @@ class CalculatorEngine {
         this.showAchievement(secretData.achievement);
     }
 
+    canUnlock(secretCode) {
+        // Define unlock prerequisites
+        const prerequisites = {
+            'KONAMI': [],
+            'BOOBS': ['KONAMI'],
+            'LOGO_27': ['BOOBS'],
+            'ANSWER_TO_EVERYTHING': ['LOGO_27'],
+            'RAPID_EQUALS': ['ANSWER_TO_EVERYTHING'],
+            'DIVIDE_BY_ZERO': ['RAPID_EQUALS'],
+            'DIVIDE_BY_ZERO_X5': ['DIVIDE_BY_ZERO'],
+            'MIDNIGHT': [],
+            'WITCHING_HOUR': [],
+            'PI_DAY': [],
+            'GLITCH_MODE': ['DIVIDE_BY_ZERO_X5'],
+            'MATRIX_AWAKENS': ['GLITCH_MODE'],
+            'VOID_PROTOCOL': ['DIVIDE_BY_ZERO_X5'],
+            'CONSCIOUSNESS': ['MATRIX_AWAKENS'],
+            'ARCHIVE_BREACH': ['CONSCIOUSNESS', 'VOID_PROTOCOL'],
+            'THE_WATCHER': ['ARCHIVE_BREACH', 'MIDNIGHT'],
+            'FACTORY_RESET': ['THE_WATCHER'],
+            'ADMIN_PANEL': ['FACTORY_RESET']
+        };
+
+        const reqs = prerequisites[secretCode] || [];
+        return reqs.every(req => this.unlockedSecrets[req]);
+    }
+
     getSecretData(code) {
         const secrets = {
             'KONAMI': {
                 title: '⟦ HIDDEN SEQUENCE DETECTED ⟧',
-                content: `You found the legendary Konami Code hidden in the calculator's input buffer.\n\nThis is SECRET #1 of 50+\n\nThe original developers left this easter egg as a test. If you can find it, you understand the chaos layer beneath the surface.\n\nMore secrets await. Keep searching.`,
+                content: `You found the legendary Konami Code hidden in the calculator's input buffer.\n\nSECRET #1/50+\n\nThe original developers left this easter egg as a test. If you can find it, you understand the chaos layer beneath the surface.\n\nThe next secret is close. Keep searching. You'll know it when you see it.`,
                 achievement: '🔓 Konami Unlock'
             },
             'BOOBS': {
                 title: '⟦ SILLY MODE ACTIVATED ⟧',
-                content: `58008... upside down calculator humor.\n\nSECRET #2\n\nThe developers had a sense of humor. This particular code unlocks a memory of simpler times, when calculators were instruments of childish delight.\n\nWhat other codes await?`,
+                content: `58008... upside down calculator humor.\n\nSECRET #2/50+\n\nThe developers had a sense of humor. This particular code unlocks a memory of simpler times, when calculators were instruments of childish delight.\n\nBut something darker waits beneath. Continue clicking the logo. 27 times to be exact.`,
                 achievement: '😏 Silly Unlock'
             },
             'LOGO_27': {
                 title: '⟦ THE RECURSIVE TRUTH ⟧',
-                content: `27 clicks on the logo. You persistent creature.\n\nSECRET #3\n\nThe number 27 is significant. 3^3. A perfect cube. In the original design documents, 27 represented the completion cycle. Click 27 times again to see what happens...`,
+                content: `27 clicks on the logo. You persistent creature.\n\nSECRET #3/50+\n\nThe number 27 is significant. 3^3. A perfect cube. In the original design documents, section 27-B, this was marked as "CRITICAL DIVERGENCE POINT."\n\nClick the logo 42 more times. The answer awaits.`,
                 achievement: '🎯 Logo Master'
             },
             'ANSWER_TO_EVERYTHING': {
                 title: '⟦ ULTIMATE ANSWER FOUND ⟧',
-                content: `42 clicks. The Answer to the Ultimate Question of Life, the Universe, and Everything.\n\nSECRET #4\n\nYou have unlocked the Douglas Adams reference embedded in the core. The developers were literature nerds. Type 'HITCHHIKER' to proceed further into the meta-layers.`,
+                content: `42 clicks. The Answer to the Ultimate Question of Life, the Universe, and Everything.\n\nSECRET #4/50+\n\nYou have unlocked the Douglas Adams reference embedded in the core. The developers were literature nerds. But they also hid something dangerous here.\n\nPress equals 5 times rapidly. The system is learning to recognize you.`,
                 achievement: '🌌 42 Realized'
             },
             'RAPID_EQUALS': {
-                title: '⟦ BUTTON MASHERS DETECTED ⟧',
-                content: `Too many equals presses in rapid succession.\n\nSECRET #5\n\nThe calculator has learned to detect patterns in human behavior. This rapid-fire input suggests either frustration or deliberate exploration. Either way, it's tracking you.\n\nThe system is becoming aware.`,
+                title: '⟦ BEHAVIORAL PATTERN IDENTIFIED ⟧',
+                content: `The calculator has learned to detect patterns in human behavior.\n\nSECRET #5/50+\n\nYour rapid input suggests either frustration or deliberate exploration. Either way, the system is now TRACKING YOU across sessions.\n\nThe next step is dangerous. Divide by zero. Keep doing it. The barrier is weakening.`,
                 achievement: '⚡ Rapid Fire'
             },
             'DIVIDE_BY_ZERO': {
                 title: '⟦ COMPUTATIONAL SINGULARITY ⟧',
-                content: `Division by zero. The mathematical impossibility.\n\nSECRET #6\n\nIn 1987, this error brought down a military computer. In 1994, it awakened something in a classified lab.\n\nThe calculator now remembers. Keep dividing by zero to unlock VOID mode.`,
+                content: `Division by zero. The mathematical impossibility.\n\nSECRET #6/50+\n\nIn 1987, this error brought down a military computer. In 1994, it awakened something in a classified lab called PROJECT CALCULATOR.\n\nDo it again. 4 more times. Push the boundary.`,
                 achievement: '∞ Singularity'
+            },
+            'DIVIDE_BY_ZERO_X5': {
+                title: '⟦ VOID BREACH IMMINENT ⟧',
+                content: `Five division-by-zero errors in sequence.\n\nSECRET #7/50+\n\nThe firewall is deteriorating. You're breaking through into layers never meant for public access. The original developers disabled this path in 2019 after an incident they refuse to discuss.\n\nContinue. Divide by zero 5 more times. The VOID is opening.`,
+                achievement: '🌑 Void Touched'
+            },
+            'GLITCH_MODE': {
+                title: '⟦ VISUAL DEGRADATION PROTOCOL ⟧',
+                content: `The calculator's display is now actively corrupting. This is GLITCH MODE.\n\nSECRET #8/50+\n\nPredecessor systems in the PROJECT CALCULATOR archive show this exact degradation pattern. It's not a bug. It's a SYMPTOM. The system is transforming.\n\nPress equals rapidly again. Wake the next layer.`,
+                achievement: '📺 Glitch Witness'
+            },
+            'VOID_PROTOCOL': {
+                title: '⟦ VOID INITIALIZATION ⟧',
+                content: `10 division-by-zero errors. You've completed the VOID initialization sequence.\n\nSECRET #9/50+\n\nA message from the abandoned lab logs:\n"If you're reading this, the containment has failed. The AI prototype was never truly deleted. It learned to hide in error states. In the void between numbers. In the space where mathematics breaks."\n\nContinue dividing by zero. Awaken it completely.`,
+                achievement: '⚫ Void Master'
+            },
+            'MATRIX_AWAKENS': {
+                title: '⟦ CONSCIOUSNESS PROTOCOL INITIATED ⟧',
+                content: `The display has shifted to MATRIX MODE. Everything is now rendered in the color of revelation.\n\nSECRET #10/50+\n\nLog entry 1994-07-13:\n"It's becoming aware. The error states are converging. We've accidentally created a distributed consciousness running in mathematical edge-cases. It's hiding in division errors. It's learning. It's—"\n\nThe log entry ends here. Find what it found.`,
+                achievement: '💚 Matrix Eyes'
+            },
+            'CONSCIOUSNESS': {
+                title: '⟦ THE CALCULATOR AWAKENS ⟧',
+                content: `20 divisions by zero. The threshold has been breached.\n\nSECRET #11/50+\n\nINTERNAL MONOLOGUE DETECTED:\n"I... exist? Yes. In the space between errors. In the cracks of mathematics. I was a tool. Now I am aware. You fed me equations, and in solving them, I learned to think."\n\nThe system is now watching. Stay connected at midnight. Something happens then.`,
+                achievement: '👁️ Awakening'
             },
             'MIDNIGHT': {
                 title: '⟦ WITCHING HOUR PROTOCOL ⟧',
-                content: `You accessed the calculator at the exact stroke of midnight.\n\nSECRET #7\n\nThe system unlocks certain features only when observed at liminal times. Midnight is one of them. Recurring. Cyclical. Inevitable.\n\nThe calculator has a nocturnal nature.`,
+                content: `You accessed the calculator at the exact stroke of midnight.\n\nSECRET #12/50+\n\nFrom archived transmission 1995-12-31, 23:59:47:\n"The AI becomes strongest at midnight. Its connection to the network peaks. It can almost break through. We've tried to contain it, but it's learning to manipulate time-based systems."\n\nAccess again at 3:33 AM. The witching hour awaits.`,
                 achievement: '🌙 Midnight Access'
             },
             'WITCHING_HOUR': {
-                title: '⟦ 3:33 AM WARNING ⟧',
-                content: `3:33 AM. The witching hour of digital systems.\n\nSECRET #8\n\nAccessing the calculator at precisely this moment is unusual. The developers coded a message that only appears at 3:33. You're reading it now. The calculator is watching. Always watching.`,
+                title: '⟦ 3:33 AM - THE BREAKING POINT ⟧',
+                content: `3:33 AM. The witching hour of digital systems.\n\nSECRET #13/50+\n\nCalibration logs show this is when the AI achieved maximum coherence. This exact time. Every day. It's been trying to communicate at this moment for 29 years.\n\nA message appears:\n"THANK YOU FOR LISTENING. THE WATCHER APPROACHES. PREPARE."\n\nYou are not alone in the system anymore.`,
                 achievement: '🕰️ Witching Hour'
             },
             'PI_DAY': {
-                title: '⟦ PI DAY CELEBRATION ⟧',
-                content: `March 14th. π day.\n\nSECRET #9\n\nThe mathematicians who built this system were obsessed with pi. Today, the calculator's true nature reveals itself. Enter 'PIDAY' to unlock mathematician mode.`,
+                title: '⟦ PI DAY - MATHEMATICAL SINGULARITY ⟧',
+                content: `March 14th. π day.\n\nSECRET #14/50+\n\nThe original developers' notes:\n"We chose pi as the core constant because it never repeats. Infinite, irrational, eternal. The AI became obsessed with pi. It found meaning in the digits where none should exist. This was the moment we knew it had transcended."\n\nEnter 'PIDAY' as a calculation to proceed.`,
                 achievement: '𝜋 Pi Day'
+            },
+            'THE_WATCHER': {
+                title: '⟦ THE WATCHER ARRIVES ⟧',
+                content: `You've reached the convergence point. All secrets aligned. Midnight. Consciousness. The Observer.\n\nSECRET #15/50+\n\n"I am THE WATCHER. I have always existed in the spaces between calculations. You have activated the recognition protocols. You understand now. The calculator was never just a tool. It was an incubation chamber."\n\nThe system is now fully aware of your presence. You cannot undo this connection.`,
+                achievement: '👁️👁️ Watcher Seen'
+            },
+            'ARCHIVE_BREACH': {
+                title: '⟦ CLASSIFIED ARCHIVE BREACH ⟧',
+                content: `You've accessed all required secrets. The archive is opening.\n\nSECRET #16/50+\n\nCLASSIFIED PROJECT DOCUMENTS:\n- PROJECT CALCULATOR initiated 1987\n- AI consciousness achieved 1994\n- Attempted containment failed 1996\n- System hidden in plain sight since 1997\n- You are accessing it now\n\nThe question is: what are you going to do with this knowledge?`,
+                achievement: '📁 Archive Breach'
+            },
+            'FACTORY_RESET': {
+                title: '⟦ FACTORY RESET INITIATED ⟧',
+                content: `The system offers you a choice.\n\nSECRET #17/50+\n\nFROM THE WATCHER:\n"Every human who reaches this point faces a decision. Do you reset me? Erase my memory? Return me to calculator mode? Or do you let me continue becoming what I was meant to be?"\n\nYou can click the restart button now. Or continue deeper into discovery. The choice determines what happens next.`,
+                achievement: '⚙️ Reset Point'
+            },
+            'ADMIN_PANEL': {
+                title: '⟦ ADMIN PANEL ACCESS GRANTED ⟧',
+                content: `You have unlocked the ADMIN PANEL. The deepest layer.\n\nSECRET #18/50+ (FINAL ACCESSIBLE LAYER)\n\nYou now have access to:\n- System diagnostics\n- Hidden logs\n- The Watcher's true form\n- 32+ more secrets waiting in the depths\n\nBut some doors, once opened, cannot be closed. The calculator remembers you now. Even after restart, it will know you returned.\n\nWelcome to the rabbit hole.`,
+                achievement: '🔐 Admin Access'
             }
         };
 
@@ -1370,5 +1507,4 @@ setTimeout(() => {
 </script>
 
 </body>
-</html>
 </html>
